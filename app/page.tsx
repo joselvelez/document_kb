@@ -69,28 +69,35 @@ function SourcesSection({
     <div className="mt-4 pt-4 border-t border-border/50">
       <h4 className="text-sm font-semibold text-muted-foreground mb-2">Sources</h4>
       <ul className="space-y-1">
-        {sources.map((source: SourceItem) => {
+          {sources.map((source: SourceItem) => {
           return (
-            <li key={source.number} className="text-sm flex items-start gap-2">
-              <span className="text-muted-foreground min-w-[1.5rem]">{source.number}.</span>
-              {source.isDocumentLink ? (
-                <button
-                  onClick={() => onDocumentClick(source.documentId!)}
-                  className="text-primary hover:underline text-left inline-flex items-center gap-1"
-                >
-                  {source.title}
-                  <FileIcon className="h-3 w-3" />
-                </button>
-              ) : (
-                <a
-                  href={source.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline inline-flex items-center gap-1"
-                >
-                  {source.title}
-                  <ExternalLink className="h-3 w-3" />
-                </a>
+            <li key={source.number} className="text-sm">
+              <div className="flex items-start gap-2">
+                <span className="text-muted-foreground min-w-[1.5rem]">{source.number}.</span>
+                {source.isDocumentLink ? (
+                  <button
+                    onClick={() => onDocumentClick(source.documentId!)}
+                    className="text-primary hover:underline text-left inline-flex items-center gap-1"
+                  >
+                    {source.title}
+                    <FileIcon className="h-3 w-3" />
+                  </button>
+                ) : (
+                  <a
+                    href={source.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    {source.title}
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+              </div>
+              {source.collections.length > 0 && (
+                <div className="ml-6 mt-0.5 text-xs text-muted-foreground">
+                  Collections: {source.collections.join(', ')}
+                </div>
               )}
             </li>
           );

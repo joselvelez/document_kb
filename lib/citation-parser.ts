@@ -9,6 +9,7 @@ export interface SourceItem {
   url: string;
   isDocumentLink: boolean;
   documentId?: string;
+  collections: string[];
 }
 
 /**
@@ -36,8 +37,8 @@ export function parseFootnoteCitations(text: string): ParsedCitation[] {
  * Extracts the Sources section from a message and parses the sources
  * Expected format:
  * ## Sources
- * 1. [Document Title](doc://documentId)
- * 2. [Document Title](https://url)
+ * 1. [Document Title](doc://documentId) (Collections: collection1, collection2)
+ * 2. [Document Title](https://url) (Collections: collection1)
  */
 export function extractSourcesSection(text: string): { mainText: string; sources: SourceItem[] } {
   // Find the Sources section
@@ -53,8 +54,8 @@ export function extractSourcesSection(text: string): { mainText: string; sources
     const lines = sourcesText.split('\n').filter(line => line.trim());
     
     for (const line of lines) {
-      // Match format: "1. [Title](url)" or just the markdown link
-      const numberedMatch = line.match(/^\s*(\d+)\.\s*\[([^\]]+)\]\(([^)]+)\)/);
+      // Match format: "1. [Title](url) (Collections: collection1, collection2)"
+      const numberedMatch = line.match(/^\s*(\d+)\.\s*\[([^\]]+)\]\(([^)]+)\)(?:\s*\(Collections:\s*([^)]+)\))?/);
       
       if (numberedMatch) {
         const number = parseInt(numberedMatch[1], 10);
@@ -63,12 +64,19 @@ export function extractSourcesSection(text: string): { mainText: string; sources
         const isDocumentLink = url.startsWith('doc://');
         const documentId = isDocumentLink ? url.replace('doc://', '') : undefined;
         
+        // Parse collections if present
+        const collectionsText = numberedMatch[4];
+        const collections = collectionsText 
+          ? collectionsText.split(',').map(c => c.trim()).filter(c => c.length > 0)
+          : [];
+        
         sources.push({
           number,
           title,
           url,
           isDocumentLink,
           documentId,
+          collections,
         });
       }
     }

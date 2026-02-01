@@ -93,6 +93,18 @@ export async function POST(request: Request) {
       });
     }
 
+    // Fetch full document details to get containerTags (collections)
+    const documentDetails = await Promise.all(
+      searchResults.results.map(async (result) => {
+        try {
+          const doc = await client.documents.get(result.documentId);
+          return doc;
+        } catch (e) {
+          return null;
+        }
+      })
+    );
+
     // Prepare context from search results
     const context = searchResults.results
       .map((result, index) => {
@@ -114,18 +126,24 @@ export async function POST(request: Request) {
       })
       .join('\n\n---\n\n');
 
-    // Prepare sources with document URLs for citation
+    // Prepare sources with document URLs and collections for citation
     const sources = searchResults.results.map((result, index) => {
       // Extract URL from metadata - check both content (for full docs) and metadata
       const content = (result as any).content || '';
       const metadata = (result as any).metadata || {};
       const originalUrl = metadata.originalUrl || metadata.url || null;
       
+      // Get collections from the full document details
+      const fullDoc = documentDetails[index];
+      const containerTags = (fullDoc as any)?.containerTags || [];
+      const collections = containerTags.filter((tag: string) => tag !== 'all');
+      
       return {
         id: result.documentId,
         title: result.title,
         type: result.type,
         url: originalUrl,
+        collections: collections,
         relevantChunks: result.chunks.filter((chunk) => chunk.isRelevant).length || result.chunks.length,
         score: result.score,
         citationNumber: index + 1,
@@ -134,10 +152,13 @@ export async function POST(request: Request) {
 
     const sourcesList = sources
       .map((source) => {
+        const collectionsInfo = source.collections.length > 0 
+          ? ` (Collections: ${source.collections.join(', ')})` 
+          : '';
         if (source.url) {
-          return `${source.citationNumber}. [${source.title}](${source.url})`;
+          return `${source.citationNumber}. [${source.title}](${source.url})${collectionsInfo}`;
         } else {
-          return `${source.citationNumber}. [${source.title}](doc://${source.id})`;
+          return `${source.citationNumber}. [${source.title}](doc://${source.id})${collectionsInfo}`;
         }
       })
       .join('\n');
