@@ -26,6 +26,9 @@ A modern document Q&A system built with Next.js, Supermemory, Clerk Authenticati
 - View all documents within a collection
 - Delete individual documents
 - Track document status (ready, processing, failed)
+- **Document Viewer** - Click any document to view extracted content in a dialog
+- Content extraction notice explains how Supermemory processes files
+- Open original URLs directly from the document viewer
 
 🤖 **AI-Powered Q&A with GPT-4o-mini**
 - Ask questions in natural language
@@ -33,6 +36,11 @@ A modern document Q&A system built with Next.js, Supermemory, Clerk Authenticati
 - **Global search across ALL collections** - no need to switch contexts
 - Context-aware responses using Vercel AI SDK
 - Powered by OpenAI's GPT-4o-mini
+- **Clickable Sources Section** - Every answer includes a Sources section with:
+  - Clickable document titles for uploaded files (opens document viewer)
+  - Clickable URLs for web sources (opens in new tab)
+  - Collection information showing which collections each source belongs to
+- **Document Viewer Integration** - Click any cited document to view its full content
 
 📚 **Smart Document Indexing**
 - Automatic document processing via Supermemory
@@ -256,6 +264,12 @@ The application has two main tabs:
 - Open a collection to see all documents
 - Documents show file type, status, and upload date
 
+**View Document Content:**
+- Click on any document to open the Document Viewer
+- View extracted text content from the document
+- See a content extraction notice explaining how Supermemory processes files
+- For web sources, click "Open original" to view the source URL
+
 **Delete Documents:**
 - Hover over any document and click the trash icon
 - Confirm deletion to remove from Supermemory
@@ -268,6 +282,13 @@ The application has two main tabs:
 - Press Enter or click Send
 - The AI searches across **ALL collections** for relevant information
 - Receive AI-powered answers with source citations
+
+**Sources Section:**
+- Each answer includes a "Sources" section at the bottom
+- **Click document titles** to open the Document Viewer and see the full content
+- **Click URL sources** to open the original web page in a new tab
+- Each source shows which collections it belongs to
+- Sources are numbered and formatted for easy reference
 
 ### Example Questions
 
@@ -288,7 +309,7 @@ app/
 │   ├── memories/
 │   │   ├── route.ts              # List/add/delete memories
 │   │   └── [id]/
-│   │       └── route.ts          # Get memory details
+│   │       └── route.ts          # Get specific memory/document details
 │   ├── qa/
 │   │   └── route.ts              # Q&A endpoint (global search)
 │   └── upload-document/
@@ -320,6 +341,7 @@ components/
     └── use-toast.ts
 
 lib/
+├── citation-parser.ts           # Parse AI response Sources section
 ├── document-processor.ts        # Document handling logic
 └── utils.ts                     # Utility functions
 
@@ -341,16 +363,34 @@ Handles all document operations:
 - File uploads to Supermemory
 - URL processing
 - Document listing and status tracking
+- **Document content retrieval** - Fetch full document content for viewer
 - Collection management (create, list, delete)
 - Metadata management
+
+### Citation Parser (`lib/citation-parser.ts`)
+
+Utility for parsing AI response sources:
+- Extracts the Sources section from AI responses
+- Parses document citations with titles, URLs, and collection info
+- Supports both document links (`doc://documentId`) and web URLs
+- Separates main response text from sources for UI display
+- Returns structured source data for the SourcesSection component
 
 ### Q&A API (`app/api/qa/route.ts`)
 
 Processes questions using:
 1. **Global search** across all collections (no collection filter)
-2. Context preparation from search results
-3. Vercel AI SDK v6 streaming responses
-4. Source citation generation with [Document X] format
+2. **Document details fetching** - Fetches full document details for each search result to get collection information
+3. Context preparation from search results with relevant chunks
+4. Vercel AI SDK v6 streaming responses
+5. **Sources section generation** - AI generates a formatted Sources section with document links and collection info
+
+Sources Format:
+```
+## Sources
+1. [Document Title](doc://documentId) (Collections: collection1, collection2)
+2. [URL Title](https://example.com) (Collections: collection1)
+```
 
 ### Collections API (`app/api/collections/`)
 
@@ -358,11 +398,21 @@ Processes questions using:
 - `POST /api/collections` - Validate/create a new collection
 - `DELETE /api/collections/[name]` - Delete collection and all documents
 
+### Memories API (`app/api/memories/`)
+
+- `GET /api/memories` - List memories (optionally filtered by containerTags)
+- `POST /api/memories` - Add a URL-based memory to a collection
+- `DELETE /api/memories?id={id}` - Delete a specific memory
+- `GET /api/memories/[id]` - Get full details and content of a specific memory/document
+
 ### Main Interface (`app/page.tsx`)
 
 React component featuring:
 - Tab navigation between Chat and Collections
 - Chat interface with message history
+- **MessageContent component** - Renders response text (excludes Sources section)
+- **SourcesSection component** - Displays clickable source links with collection info
+- **DocumentViewerDialog component** - Modal dialog for viewing document content
 - Collections grid with detail view
 - Toast notifications
 
@@ -420,6 +470,16 @@ const result = streamText({
 ## Recent Changes
 
 ### Latest Updates
+- **Clickable Document Sources:** AI responses now include a Sources section with clickable links
+  - Uploaded files open in the Document Viewer dialog
+  - URL sources open in a new browser tab
+  - Each source shows which collections it belongs to
+- **Document Viewer:** Click any document in a collection to view its extracted content
+  - Content extraction notice explains how Supermemory processes files
+  - Shows full extracted text content from PDFs, DOCX, TXT, and MD files
+  - Original URL link available for web sources
+- **Citation Parser:** New utility module for parsing AI response sources
+- **Enhanced Q&A API:** Now fetches full document details to include collection information in responses
 - **Clerk Authentication:** Full authentication system with protected routes and user management
 - **Global Q&A Search:** Questions now search across all collections automatically
 - **Redesigned Collections UI:** New grid layout with cards and detail views
