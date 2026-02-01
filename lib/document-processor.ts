@@ -14,6 +14,17 @@ export interface Document {
   containerTags?: string[];
 }
 
+export interface DocumentContent {
+  id: string;
+  title: string;
+  content: string;
+  type: string;
+  status: string;
+  createdAt: string;
+  url?: string;
+  metadata?: Record<string, any>;
+}
+
 export class DocumentProcessor {
   async uploadDocument({ file, collection, metadata = {} }: DocumentUpload) {
     try {
@@ -120,6 +131,41 @@ export class DocumentProcessor {
       };
     } catch (error) {
       console.error('Status check error:', error);
+      throw error;
+    }
+  }
+
+  async getDocument(documentId: string): Promise<DocumentContent> {
+    try {
+      const response = await fetch(`/api/memories/${documentId}`);
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || `Failed to get document: ${response.statusText}`);
+      }
+
+      const memory = await response.json();
+      return {
+        id: memory.id,
+        title: memory.title || 'Untitled',
+        content: memory.content || '',
+        type:
+          (this.getMetadataValue(memory.metadata, 'fileType') as
+            | string
+            | undefined) ||
+          (this.getMetadataValue(memory.metadata, 'type') as
+            | string
+            | undefined) ||
+          'unknown',
+        status: memory.status,
+        createdAt: memory.createdAt,
+        url: this.getMetadataValue(memory.metadata, 'originalUrl') as
+          | string
+          | undefined,
+        metadata: memory.metadata,
+      };
+    } catch (error) {
+      console.error('Get document error:', error);
       throw error;
     }
   }
