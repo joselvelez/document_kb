@@ -3,12 +3,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { TextStreamChatTransport, isTextUIPart } from 'ai';
-import { DocumentProcessor, type Document } from '@/lib/document-processor';
+import { DocumentProcessor, type Document, type DocumentContent } from '@/lib/document-processor';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/components/ui/use-toast';
@@ -16,22 +15,26 @@ import { CollectionGrid } from '@/components/collection-grid';
 import { CollectionDetail } from '@/components/collection-detail';
 import { CreateCollectionDialog } from '@/components/create-collection-dialog';
 import {
-  Upload,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  extractSourcesSection,
+  type SourceItem,
+} from '@/lib/citation-parser';
+import {
   Send,
   FileText,
   Loader2,
   RefreshCw,
   Database,
   MessageSquare,
+  ExternalLink,
+  FileIcon,
 } from 'lucide-react';
-
-interface Source {
-  id: string;
-  title: string;
-  citationNumber: number;
-  score: number;
-  relevantChunks: number;
-}
 
 interface Collection {
   name: string;
@@ -39,10 +42,158 @@ interface Collection {
   lastUpdated?: string | null;
 }
 
+// Component to render plain message text (stops at Sources section)
+function MessageContent({
+  text,
+}: {
+  text: string;
+}) {
+  // Extract only the main text (before Sources section)
+  const { mainText } = extractSourcesSection(text);
+  return <div className="whitespace-pre-wrap">{mainText}</div>;
+}
+
+// Component to render sources section
+function SourcesSection({ 
+  text, 
+  onDocumentClick 
+}: { 
+  text: string;
+  onDocumentClick: (docId: string) => void;
+}) {
+  const { sources } = extractSourcesSection(text);
+  
+  if (sources.length === 0) return null;
+
+  return (
+    <div className="mt-4 pt-4 border-t border-border/50">
+      <h4 className="text-sm font-semibold text-muted-foreground mb-2">Sources</h4>
+      <ul className="space-y-1">
+        {sources.map((source: SourceItem) => {
+          return (
+            <li key={source.number} className="text-sm flex items-start gap-2">
+              <span className="text-muted-foreground min-w-[1.5rem]">{source.number}.</span>
+              {source.isDocumentLink ? (
+                <button
+                  onClick={() => onDocumentClick(source.documentId!)}
+                  className="text-primary hover:underline text-left inline-flex items-center gap-1"
+                >
+                  {source.title}
+                  <FileIcon className="h-3 w-3" />
+                </button>
+              ) : (
+                <a
+                  href={source.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline inline-flex items-center gap-1"
+                >
+                  {source.title}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+// Document Viewer Dialog Component
+function DocumentViewerDialog({
+  isOpen,
+  onClose,
+  documentId,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  documentId: string | null;
+}) {
+  const [doc, setDoc] = useState<DocumentContent | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
+  const processor = useRef(new DocumentProcessor());
+
+  useEffect(() => {
+    if (isOpen && documentId) {
+      setIsLoading(true);
+      processor.current
+        .getDocument(documentId)
+        .then((document) => {
+          setDoc(document);
+        })
+        .catch((error) => {
+          toast({
+            title: 'Error',
+            description: 'Failed to load document: ' + error.message,
+            variant: 'destructive',
+          });
+          onClose();
+        })
+        .finally(() => {
+          setIsLoading(false);
+        });
+    } else {
+      setDoc(null);
+    }
+  }, [isOpen, documentId, toast, onClose]);
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <span>{doc?.title || 'Document'}</span>
+            {doc?.url && (
+              <a
+                href={doc.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-normal text-primary hover:underline flex items-center gap-1"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Open original
+              </a>
+            )}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="flex-1 min-h-0 mt-4">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <span className="ml-2 text-muted-foreground">Loading document...</span>
+            </div>
+          ) : doc ? (
+            <ScrollArea className="h-[55vh] pr-4">
+              <div className="prose prose-sm max-w-none dark:prose-invert">
+                {doc.content ? (
+                  <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                    {doc.content}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground italic">No content available</p>
+                )}
+              </div>
+            </ScrollArea>
+          ) : null}
+        </div>
+        <DialogFooter className="mt-4">
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // Separate Chat component
 function ChatInterface({ documents }: { documents: Document[] }) {
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
 
   const { messages, sendMessage, status } = useChat({
     transport: new TextStreamChatTransport({
@@ -65,6 +216,11 @@ function ChatInterface({ documents }: { documents: Document[] }) {
     await sendMessage({ text: currentInput });
   };
 
+  const handleDocumentClick = (docId: string) => {
+    setSelectedDocId(docId);
+    setViewerOpen(true);
+  };
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -72,82 +228,102 @@ function ChatInterface({ documents }: { documents: Document[] }) {
   }, [messages]);
 
   return (
-    <Card className="h-[calc(100vh-12rem)]">
-      <CardHeader>
-        <CardTitle>Ask Questions</CardTitle>
-        <CardDescription>
-          Get AI-powered answers from all your documents
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="h-[calc(100%-5rem)] flex flex-col">
-        <ScrollArea className="flex-1 pr-4" ref={scrollRef}>
-          <div className="space-y-4">
-            {messages.length === 0 && (
-              <div className="text-muted-foreground text-center py-12">
-                <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p className="font-medium mb-2">
-                  Upload documents and ask questions!
-                </p>
-                <div className="text-sm mt-4 space-y-1">
-                  <p className="font-medium">Try asking:</p>
-                  <ul className="space-y-1">
-                    <li>• "What are the main findings?"</li>
-                    <li>• "Summarize the key points"</li>
-                    <li>• "Compare the approaches in different documents"</li>
-                  </ul>
+    <>
+      <Card className="h-[calc(100vh-12rem)]">
+        <CardHeader>
+          <CardTitle>Ask Questions</CardTitle>
+          <CardDescription>
+            Get AI-powered answers from all your documents
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="h-[calc(100%-5rem)] flex flex-col">
+          <ScrollArea className="flex-1 pr-4" ref={scrollRef}>
+            <div className="space-y-4">
+              {messages.length === 0 && (
+                <div className="text-muted-foreground text-center py-12">
+                  <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p className="font-medium mb-2">
+                    Upload documents and ask questions!
+                  </p>
+                  <div className="text-sm mt-4 space-y-1">
+                    <p className="font-medium">Try asking:</p>
+                    <ul className="space-y-1">
+                      <li>• "What are the main findings?"</li>
+                      <li>• "Summarize the key points"</li>
+                      <li>• "Compare the approaches in different documents"</li>
+                    </ul>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`p-4 rounded-lg ${
-                  message.role === 'user'
-                    ? 'bg-primary text-primary-foreground ml-12'
-                    : 'bg-muted mr-12'
-                }`}
-              >
-                <div className="whitespace-pre-wrap">
-                  {message.parts
-                    .filter(isTextUIPart)
-                    .map((part) => part.text)
-                    .join('')}
+              {messages.map((message) => {
+                const text = message.parts
+                  .filter(isTextUIPart)
+                  .map((part) => part.text)
+                  .join('');
+                
+                return (
+                  <div
+                    key={message.id}
+                    className={`p-4 rounded-lg ${
+                      message.role === 'user'
+                        ? 'bg-primary text-primary-foreground ml-12'
+                        : 'bg-muted mr-12'
+                    }`}
+                  >
+                    {message.role === 'assistant' ? (
+                      <>
+                        <MessageContent text={text} />
+                        <SourcesSection text={text} onDocumentClick={handleDocumentClick} />
+                      </>
+                    ) : (
+                      <div className="whitespace-pre-wrap">{text}</div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {isLoading && (
+                <div className="bg-muted p-4 rounded-lg mr-12">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Searching documents and generating answer...</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )}
+            </div>
+          </ScrollArea>
 
-            {isLoading && (
-              <div className="bg-muted p-4 rounded-lg mr-12">
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Searching documents and generating answer...</span>
-                </div>
-              </div>
-            )}
-          </div>
-        </ScrollArea>
+          <form onSubmit={handleSubmit} className="flex gap-2 mt-4">
+            <Input
+              value={input}
+              onChange={handleInputChange}
+              placeholder="Ask a question about your documents..."
+              disabled={isLoading || documents.length === 0}
+              className="flex-1"
+            />
+            <Button type="submit" disabled={isLoading || !input.trim() || documents.length === 0}>
+              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </Button>
+          </form>
 
-        <form onSubmit={handleSubmit} className="flex gap-2 mt-4">
-          <Input
-            value={input}
-            onChange={handleInputChange}
-            placeholder="Ask a question about your documents..."
-            disabled={isLoading || documents.length === 0}
-            className="flex-1"
-          />
-          <Button type="submit" disabled={isLoading || !input.trim() || documents.length === 0}>
-            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </Button>
-        </form>
+          {documents.length === 0 && (
+            <p className="text-sm text-muted-foreground mt-2 text-center">
+              Upload documents to enable questions
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
-        {documents.length === 0 && (
-          <p className="text-sm text-muted-foreground mt-2 text-center">
-            Upload documents to enable questions
-          </p>
-        )}
-      </CardContent>
-    </Card>
+      <DocumentViewerDialog
+        isOpen={viewerOpen}
+        onClose={() => {
+          setViewerOpen(false);
+          setSelectedDocId(null);
+        }}
+        documentId={selectedDocId}
+      />
+    </>
   );
 }
 

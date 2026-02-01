@@ -77,7 +77,7 @@ export async function POST(request: Request) {
       q: question,
       limit: 8,
       rerank: true,
-      includeFullDocs: false,
+      includeFullDocs: true,
       includeSummary: true,
       onlyMatchingChunks: false,
       documentThreshold: 0.3,
@@ -110,19 +110,37 @@ export async function POST(request: Request) {
           .map((chunk) => chunk.content)
           .join('\n\n');
 
-        return `[Document ${index + 1}: "${result.title}"]\n${chunks}`;
+        return `[Document ${index + 1}: "${result.title}" (ID: ${result.documentId})]\n${chunks}`;
       })
       .join('\n\n---\n\n');
 
-    // Prepare sources for citation
-    const sources = searchResults.results.map((result, index) => ({
-      id: result.documentId,
-      title: result.title,
-      type: result.type,
-      relevantChunks: result.chunks.filter((chunk) => chunk.isRelevant).length || result.chunks.length,
-      score: result.score,
-      citationNumber: index + 1,
-    }));
+    // Prepare sources with document URLs for citation
+    const sources = searchResults.results.map((result, index) => {
+      // Extract URL from metadata - check both content (for full docs) and metadata
+      const content = (result as any).content || '';
+      const metadata = (result as any).metadata || {};
+      const originalUrl = metadata.originalUrl || metadata.url || null;
+      
+      return {
+        id: result.documentId,
+        title: result.title,
+        type: result.type,
+        url: originalUrl,
+        relevantChunks: result.chunks.filter((chunk) => chunk.isRelevant).length || result.chunks.length,
+        score: result.score,
+        citationNumber: index + 1,
+      };
+    });
+
+    const sourcesList = sources
+      .map((source) => {
+        if (source.url) {
+          return `${source.citationNumber}. [${source.title}](${source.url})`;
+        } else {
+          return `${source.citationNumber}. [${source.title}](doc://${source.id})`;
+        }
+      })
+      .join('\n');
 
     const systemPrompt = `You are a helpful document Q&A assistant. Answer questions based ONLY on the provided document context.
 
@@ -131,16 +149,16 @@ ${context}
 
 INSTRUCTIONS:
 1. Answer the question using ONLY the information from the provided documents
-2. Include specific citations in your response using [Document X] format
-3. If the documents don't contain enough information, say so clearly
-4. Be accurate and quote directly when possible
-5. If multiple documents support a point, cite all relevant ones
-6. Maintain a helpful, professional tone
+2. If the documents don't contain enough information, say so clearly
+3. Be accurate and quote directly when possible
+4. Maintain a helpful, professional tone
+5. ALWAYS include a "## Sources" section at the end listing all documents you referenced
 
-CITATION FORMAT:
-- Use [Document 1], [Document 2], etc. to cite sources
-- Place citations after the relevant information
-- Example: "The process involves three steps [Document 1]. However, some experts recommend a four-step approach [Document 3]."
+SOURCES SECTION FORMAT:
+At the end of your response, add:
+## Sources
+
+${sourcesList}
 
 If the question cannot be answered from the provided documents, respond with: "I don't have enough information in the provided documents to answer this question accurately."`;
 

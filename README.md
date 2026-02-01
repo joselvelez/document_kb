@@ -86,7 +86,7 @@ npm install
 Create a `.env` file in the root directory:
 
 ```bash
-cp .env.example .env
+cp env.example .env
 ```
 
 Edit `.env` and add your API keys:
@@ -126,6 +126,71 @@ npm run dev
 7. **Open your browser**
 
 Navigate to [http://localhost:3000](http://localhost:3000)
+
+## Keeping Your Private Clone Updated
+
+If you've cloned this repository for private use and want to stay up-to-date with public improvements, follow this workflow:
+
+### Initial Setup
+
+1. **Clone the public repository:**
+   ```bash
+   git clone <public-repo-url>
+   cd document_kb
+   ```
+
+2. **Create your private repository** on GitHub/GitLab (don't initialize it with any files)
+
+3. **Update the remote to point to your private repo:**
+   ```bash
+   git remote set-url origin <your-private-repo-url>
+   ```
+
+4. **Add the public repository as an upstream remote:**
+   ```bash
+   git remote add upstream <public-repo-url>
+   ```
+
+5. **Push to your private repository:**
+   ```bash
+   git push origin main
+   ```
+
+### Regular Workflow
+
+**For your day-to-day work** (all commits and pushes go to your private repository):
+```bash
+git add .
+git commit -m "your changes"
+git push  # automatically pushes to your private repo
+```
+
+**To pull updates from the public repository:**
+```bash
+# Fetch the latest changes from the public repo
+git fetch upstream
+
+# Merge the updates into your local branch
+git merge upstream/main
+
+# Push the merged updates to your private repo
+git push
+```
+
+**Verify your remotes** at any time:
+```bash
+git remote -v
+# Should show:
+# origin    <your-private-repo-url> (fetch)
+# origin    <your-private-repo-url> (push)
+# upstream  <public-repo-url> (fetch)
+# upstream  <public-repo-url> (push)
+```
+
+This setup ensures:
+- Your private work stays in your private repository
+- You can easily pull improvements from the public repository
+- You cannot accidentally push to the public repository (you don't have write access)
 
 ## Usage
 
