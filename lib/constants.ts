@@ -1,2 +1,2 @@
 // App Name
-export const appName = 'Your App'
+export const appName = 'GridL Knowledge Base'
