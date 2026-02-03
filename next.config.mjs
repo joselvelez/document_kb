@@ -1,8 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Increase body size limit for API routes (e.g., file uploads) to 50MB
-  // This replaces the deprecated serverActions.bodySizeLimit which only applies to server actions
-  middlewareClientMaxBodySize: '50mb',
+  // Body size limit is configured at the route level in app/api/upload-document/route.ts
 };
 
 export default nextConfig;

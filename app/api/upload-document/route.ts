@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Supermemory, toFile } from 'supermemory';
 
+// Configure body size limit for this route (50MB)
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '50mb',
+    },
+  },
+};
+
 const apiKey = process.env.SUPERMEMORY_API_KEY;
 
 if (!apiKey) {
