@@ -1,61 +1,131 @@
-export interface DocumentUpload {
-  file: File;
-  collection: string;
-  metadata?: Record<string, any>;
+import { uploadDocument as uploadDocumentAction, type UploadDocumentResponse } from '@/app/actions/upload-document';
+import { MAX_UPLOAD_SIZE_BYTES, MAX_UPLOAD_SIZE_DISPLAY } from '@/lib/constants';
+
+/**
+ * Error thrown when a file exceeds the maximum allowed upload size.
+ */
+export class FileSizeExceededError extends Error {
+  /** The size of the file that was attempted to upload */
+  public readonly fileSize: number;
+  /** The maximum allowed file size */
+  public readonly maxSize: number;
+
+  constructor(fileSize: number, maxSize: number) {
+    super(`File size (${Math.round(fileSize / 1024 / 1024)}MB) exceeds maximum allowed size of ${MAX_UPLOAD_SIZE_DISPLAY}`);
+    this.name = 'FileSizeExceededError';
+    this.fileSize = fileSize;
+    this.maxSize = maxSize;
+  }
 }
 
+/**
+ * Parameters for uploading a document to a collection.
+ */
+export interface DocumentUpload {
+  /** The file to upload */
+  file: File;
+  /** The collection name to associate the document with */
+  collection: string;
+  /** Optional metadata to attach to the document */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Represents a document in a collection.
+ */
 export interface Document {
+  /** Unique identifier for the document */
   id: string;
+  /** Document title */
   title: string;
+  /** Document type (e.g., 'pdf', 'docx', 'url') */
   type: string;
+  /** Processing status */
   status: string;
+  /** ISO timestamp of when the document was uploaded */
   uploadedAt: string;
+  /** Original URL if document was added via URL */
   url?: string;
+  /** Container tags associated with this document */
   containerTags?: string[];
 }
 
+/**
+ * Full document content including extracted text.
+ */
 export interface DocumentContent {
+  /** Unique identifier for the document */
   id: string;
+  /** Document title */
   title: string;
+  /** Extracted text content from the document */
   content: string;
+  /** Document type */
   type: string;
+  /** Processing status */
   status: string;
+  /** ISO timestamp of when the document was created */
   createdAt: string;
+  /** Original URL if document was added via URL */
   url?: string;
-  metadata?: Record<string, any>;
+  /** Document metadata */
+  metadata?: Record<string, unknown>;
 }
 
+/**
+ * Client-side service for document operations.
+ *
+ * Provides methods for uploading, retrieving, listing, and deleting documents
+ * within collections. Uses server actions for file uploads to support large
+ * file sizes configured via serverActions.bodySizeLimit.
+ */
 export class DocumentProcessor {
-  async uploadDocument({ file, collection, metadata = {} }: DocumentUpload) {
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('containerTags', JSON.stringify([collection]));
-      formData.append(
-        'metadata',
-        JSON.stringify({
-          originalName: file.name,
-          fileType: file.type,
-          uploadedAt: new Date().toISOString(),
-          ...metadata,
-        })
-      );
-
-      const response = await fetch('/api/upload-document', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || `Upload failed: ${response.statusText}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('Document upload error:', error);
-      throw error;
+  /**
+   * Uploads a document file to a collection.
+   *
+   * Uses a server action to handle the upload, which supports configurable
+   * body size limits for large files.
+   *
+   * @param params - Upload parameters including file, collection, and optional metadata
+   * @returns Promise resolving to the upload response with document ID
+   * @throws FileSizeExceededError if the file exceeds MAX_UPLOAD_SIZE_BYTES
+   * @throws Error if the upload fails
+   *
+   * @example
+   * ```typescript
+   * const processor = new DocumentProcessor();
+   * const result = await processor.uploadDocument({
+   *   file: myFile,
+   *   collection: 'my-collection',
+   *   metadata: { category: 'reports' }
+   * });
+   * ```
+   */
+  async uploadDocument({ file, collection, metadata = {} }: DocumentUpload): Promise<UploadDocumentResponse> {
+    if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+      throw new FileSizeExceededError(file.size, MAX_UPLOAD_SIZE_BYTES);
     }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('containerTags', JSON.stringify([collection]));
+    formData.append(
+      'metadata',
+      JSON.stringify({
+        originalName: file.name,
+        fileType: file.type,
+        uploadedAt: new Date().toISOString(),
+        ...metadata,
+      })
+    );
+
+    const result = await uploadDocumentAction(formData);
+
+    if (!result.success) {
+      throw new Error(result.error || 'Upload failed');
+    }
+
+    return result;
   }
 
   async uploadURL({
